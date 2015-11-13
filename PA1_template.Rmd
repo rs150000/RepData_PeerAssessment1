@@ -7,19 +7,98 @@ output:
 
 
 ## Loading and preprocessing the data
-
-
+After the forking the repository on Github and cloning it to a local directory, the data for the study is found in a zip file in the cloned directory.  The initial steps are to:  
+- unzip the file  
+- create a data object from the file to use for answering the questions  
+```{r}
+unzip("c:\\Users\\RS150000\\Documents\\GitHub\\RepData_PeerAssessment1\\activity.zip"
+      ,exdir = "c:\\Users\\RS150000\\Documents\\GitHub\\RepData_PeerAssessment1")
+steps <- read.csv("c:\\Users\\RS150000\\Documents\\GitHub\\RepData_PeerAssessment1\\activity.csv", header=TRUE)
+```
+The read.csv function is used to create the data frame, "steps".  After the initial prep, the assignment asks questions in four sections of sets. The first section focuses on totals and distributions.
 
 ## What is mean total number of steps taken per day?
+The first question asks for the total steps by day, which means that the result set will be fairly lengthy.
+```{r}
+by(steps$steps, steps$date, sum, na.rm = TRUE)
+```
+The second question asks for a consolidation of the total steps per day into a histogram.
+```{r}
+hist(by(steps$steps, steps$date, sum, na.rm = TRUE), breaks = 10, plot = TRUE
+     , main = "Histogram of Total Steps by Day", xlab = "Steps per Day")
+```
+And then asks for the mean and median steps per day
+```{r}
+mean(by(steps$steps, steps$date, sum, na.rm = TRUE))
+median(by(steps$steps, steps$date, sum, na.rm = TRUE))
+```
+The histogram's spike at the 10K step mark, the skew toward the high end, and the median of 10,395 may indicate that the subject had a daily target of 10k steps, a common suggested milestone for people tracking their steps.
 
-
-
+The second section asks to look at the average daily activity pattern and identify the interval with the highest average activity
 ## What is the average daily activity pattern?
+```{r}
+library(dplyr)
+stepplot <- steps %>%
+        group_by(interval) %>%
+        summarize(mean(steps,na.rm = TRUE))
+names(stepplot) <- c("interval","avg_steps")
+plot(stepplot$interval, stepplot$avg_steps, type = "l"
+     , main = "Average Steps by 5-Minute Interval", xlab = "5 Minute Interval", ylab = "Average Steps")
+filter(stepplot, avg_steps == max(avg_steps))
+```
+A quick view of the line chart displays peak activity in the morning before 10. The maximum average interval at 835 with 206 steps, narrows down our maximum activity range, putting the peak range roughly between 8 and 9.
 
-
-
+The third section asks that missing values to be imputed and then the effect of the imputation to be reported.
 ## Imputing missing values
+```{r}
+summary(steps$steps)
+```
+Rather than simply replace the 2304 missing values with zeroes, the average steps for each interval would be rounded and substituted for each NA. Many of those averages will round down to zero for the overnight intervals, while NAs from daytime intervals having higher average activity will be filled in with hopefully more representative numbers. The new data set is called steps_nona and has the same structure as the first steps data frame created earlier.
+```{r}
+steps_mut <- inner_join(steps,mutate(stepplot, new_steps = round(avg_steps,0)), by = NULL)
+steps_nona <- data_frame()
+for(i in 1:17568) {
+        if( is.na(steps_mut[i, 1]) ) {
+                nasub <- as.data.frame(steps_mut[i, c(5,2,3)])
+                names(nasub) <- c("steps", "date", "interval")
+                steps_nona <- rbind(steps_nona, nasub)
+        }
+        else {
+                orig <- as.data.frame(steps_mut[i,1:3])
+                names(orig) <- c("steps", "date", "interval")
+                steps_nona <- rbind(steps_nona, orig)
+        }
+}
+hist(by(steps_nona$steps, steps_nona$date, sum, na.rm = TRUE), breaks = 10, plot = TRUE
+     , main = "Histogram of Total Steps by Day (Imputed NAs)", xlab = "Steps per Day")
+```
+The histogram of steps_nona total steps per day looks substantially different than the original histogram.  A much larger number of days passed the 10K step milestone.
+```{r}
+summary(by(steps_nona$steps, steps_nona$date, sum, na.rm = TRUE))
+summary(by(steps$steps, steps$date, sum, na.rm = TRUE))
+```
+Imputing values for NAs increased both the median and mean daily step values between the NA data set and non NA data set, but did not change the values for either the 3rd quartile or the max.
 
-
-
+The last assignment section is looking for differences in activity patterns between weekdays and weekends. Plotting those differences first requires the creation of a factor variable with levels for weekday and weekend.
 ## Are there differences in activity patterns between weekdays and weekends?
+```{r}
+steps_dayname <- mutate(steps_nona, dayname = weekdays(as.Date(date)))
+steps_weekpart <- inner_join(steps_dayname
+                             , data.frame( dayname = c('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday')
+                                         , daytype = c('Weekday','Weekday','Weekday','Weekday','Weekday','Weekend','Weekend') ), by = NULL)
+str(steps_weekpart)
+```
+After the day type factor is created, the panel plot can get generated.
+```{r}
+stepplot2 <- steps_weekpart %>%
+        group_by(interval,daytype) %>%
+        summarize(mean(steps,na.rm = TRUE))
+names(stepplot2) <- c("interval","daytype","avg_steps")
+library(lattice)
+xyplot(avg_steps~interval|daytype, data = stepplot2, type="l", layout = c(1,2)
+       , main = "Avg Steps per Interval by Week Part")
+```
+The plot clearly shows that weekdays concentrate most activity in the mornings, while weekend activity is spread out more through the day.  A result to be expected if the subject enjoys a regular work week.
+
+
+
